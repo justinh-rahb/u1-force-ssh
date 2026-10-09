@@ -1,0 +1,58 @@
+{
+  "name": "u1-force-ssh",
+  "title": "Force SSH",
+  "version": "0.1.0",
+  "author": "justinh-rahb",
+  "description": "Keeps SSH reachable on a Snapmaker U1 running stock firmware, even when the stock touchscreen is gone. Stock firmware only starts its SSH server (dropbear) when the stock UI's Root Access setting asks for it, by running /etc/init.d/S50dropbear with a --force flag; a plain boot skips it. Replace the stock UI (HelixScreen, for example) and SSH disappears after the next reboot, with no setting left to turn it back on. This plugin runs that same stock command, as root, at every boot and whenever dropbear is not running, so SSH comes back without reflashing. It adds no binary, opens no new port, and changes no password: it starts the SSH server your firmware already has, on port 22, with the login you already use. Uninstall to hand SSH back to the stock Root Access setting. Snapmaker U1 stock firmware only.",
+  "tagline": "Bring SSH back on a stock-firmware U1, even without the stock screen.",
+  "category": "system",
+  "channel": "testing",
+  "printer_specific": true,
+  "changelog": "doc/CHANGELOG.md",
+  "published_at": "2026-10-09",
+  "updated_at": "2026-10-09",
+  "source": "https://github.com/justinh-rahb/u1-force-ssh",
+  "publisher": "PLACEHOLDER",
+  "provides": [
+    {
+      "service": "u1-force-ssh"
+    }
+  ],
+  "require": [],
+  "conflicts": [],
+  "requires": {
+    "capabilities": [
+      "klipper-generic"
+    ],
+    "variables": []
+  },
+  "permissions": [
+    "system-bin",
+    "managed-service"
+  ],
+  "install": {
+    "place": [
+      {
+        "class": "system-bin",
+        "src": "files/bin/force-ssh-run"
+      }
+    ],
+    "service": [
+      {
+        "name": "u1-force-ssh",
+        "command": "/bin/sh",
+        "args": [
+          "$BESPOK3D/bin/force-ssh-run",
+          "/etc/init.d/S50dropbear",
+          "30"
+        ],
+        "autostart": true
+      }
+    ],
+    "restart": []
+  },
+  "conflict_resolutions": [],
+  "files": [],
+  "license": "https://github.com/justinh-rahb/u1-force-ssh/blob/master/doc/LICENSE",
+  "attributions": "# Attributions - u1-force-ssh\n\n**Plugin author:** justinh-rahb\n\nStarts the Snapmaker U1's own stock SSH server.\n\n| Upstream project | Author | Licence | Needed at runtime | Code ships in this package |\n| --- | --- | --- | --- | --- |\n| Snapmaker U1 stock firmware, `/etc/init.d/S50dropbear` and dropbear | Snapmaker | per the firmware | yes | no |\n\nNothing from the firmware ships in this package: the plugin calls the init script and the dropbear binary\nalready on the printer. The `--force` gate it relies on is documented by the Extended Firmware overlay\n`common/02-enable-ssh` (paxx12, GPL-3.0), which patches the same lines out of stock U1_2.0.0.205; no code\nfrom that overlay ships here.\n"
+}

@@ -1,0 +1,65 @@
+#!/bin/sh
+# force-ssh-run <dropbear-init-script> <check-seconds>: keeps the stock dropbear SSH server running on
+# a Snapmaker U1 by calling its own init script with the `--force` flag whenever no dropbear process
+# is up, then checking again every <check-seconds>.
+#
+# Why `--force`: stock firmware 2.0 gates /etc/init.d/S50dropbear on the build type. Its first lines
+# are, verbatim:
+#
+#   if [ "$2" != "--force" ] ; then
+#   	[ x"$(custom_misc vertype 2>/dev/null)" = x"dbg" ] || exit 0
+#   fi
+#
+# A release build is not `dbg`, so a plain `start` (the one the boot sequence runs) exits 0 without
+# starting anything. The stock touchscreen's Root Access setting is what passes `--force` and brings
+# SSH up; replace that UI (HelixScreen, for example) and nothing passes it any more, so SSH stays down
+# after every reboot. The gate is confirmed against stock U1_2.0.0.205 by the Extended Firmware overlay
+# `common/02-enable-ssh`, whose patch removes exactly these lines and is applied with zero fuzz.
+#
+# Runs as root: the Bespok3d boot runner (S99bespok3d, started by the stock boot sequence) and the
+# Bespok3d daemon both start managed services as root, which is what S50dropbear needs and what
+# Klipper and Moonraker (user `lava`) cannot provide.
+#
+# Stays in the foreground so start-stop-daemon (see adapters/snapmaker-u1/jinni/service.sh) tracks
+# this process. Stopping it does NOT stop dropbear: the SSH session a user may be relying on stays
+# up, and dropbear only stops being forced back on at the next boot.
+set -u
+
+DROPBEAR_INIT="${1:-}"
+CHECK_SECONDS="${2:-}"
+
+if [ ! -x "$DROPBEAR_INIT" ]; then
+  echo "force-ssh-run: dropbear init script not found or not executable: $DROPBEAR_INIT" >&2
+  exit 1
+fi
+case "$CHECK_SECONDS" in
+  '' | *[!0-9]* | 0)
+    echo "force-ssh-run: check interval must be a whole number of seconds above 0, got: $CHECK_SECONDS" >&2
+    exit 1
+    ;;
+esac
+
+dropbear_running() {
+  pgrep -x dropbear > /dev/null 2>&1
+}
+
+force_dropbear_start() {
+  echo "force-ssh-run: dropbear is not running, running: $DROPBEAR_INIT start --force"
+  "$DROPBEAR_INIT" start --force || echo "force-ssh-run: $DROPBEAR_INIT start --force failed" >&2
+}
+
+# The sleep runs in the background and is waited on, so a stop signal ends this process at once
+# instead of after the current interval.
+wait_pid=""
+stop_watching() {
+  [ -n "$wait_pid" ] && kill "$wait_pid" 2> /dev/null
+  exit 0
+}
+trap stop_watching TERM INT
+
+while :; do
+  dropbear_running || force_dropbear_start
+  sleep "$CHECK_SECONDS" &
+  wait_pid=$!
+  wait "$wait_pid"
+done
